@@ -1,8 +1,9 @@
 import os
-import urllib2
+import pycurl
 import json
 import sys
 from urlparse import urljoin
+from StringIO import StringIO
 
 from ansible.errors import AnsibleError
 from ansible.plugins.lookup import LookupBase
@@ -26,15 +27,18 @@ class LookupModule(LookupBase):
             raise AnsibleError('VAULT_TOKEN environment variable is missing')
 
         request_url = urljoin(url, "v1/%s" % (key))
+
+        buffer = StringIO()
         try:
-            headers = { 'X-Vault-Token' : token }
-            req = urllib2.Request(request_url, None, headers)
-            response = urllib2.urlopen(req)
-        except urllib2.HTTPError as e:
-            raise AnsibleError('Unable to read %s from vault: %s' % (key, e))
+            c = pycurl.Curl()
+            c.setopt(c.URL, request_url)
+            c.setopt(c.HTTPHEADER, ['X-Vault-Token: ' + token])
+            c.setopt(c.WRITEDATA, buffer)
+            c.perform()
+            c.close()
         except:
             raise AnsibleError('Unable to read %s from vault' % key)
 
-        result = json.loads(response.read())
+        result = json.loads(buffer.getvalue())
 
         return [result['data'][field]] if field is not None else result['data']
